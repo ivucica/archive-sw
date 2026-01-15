@@ -2,6 +2,8 @@
 
 # Example:
 # ~/zzz-gh-org-repos.sh $USER | REPO_UPDATE=1 parallel --joblog /tmp/job_progress.log --resume --resume-failed -P3 --bar -I{} ~/zzz-archive_sw.sh https://github.com/$USER/{}
+# or
+# curl https://api.github.com/users/$USER/repos?per_page=100 | jq -r '.[] | select(.disabled != true) | .name'   | REPO_UPDATE=1 parallel --joblog /tmp/$USER_job_progress.log --resume --resume-failed -P1 --bar -I{} ~/zzz-archive_sw.sh https://github.com/$USER/{}
 
 set -e
 POOL="${POOL:-"$(ls -1 / | grep pool | head -n1)"}"
