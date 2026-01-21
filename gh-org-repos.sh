@@ -83,7 +83,11 @@ while [ -n "$url" ]; do
     body=$(echo "$response" | sed -n '/^\r$/,$p' | tail -n +2)
   fi
 
-  echo "$body" | jq -r '.[].name'
+  #echo "$headers" >&2
+  #echo "$body" >&2
+
+  #echo "$body" | jq -r '.[].name'
+  echo "$body" | jq -r '.[] | select(.disabled != true) | .name'
 
   # Extract the 'next' link from the headers
   # 1. grep for 'Link:' header
