@@ -37,11 +37,18 @@ while [ -n "$url" ]; do
       -H "Accept: application/vnd.github.v3+json" \
       "$url")
 
-    # 2. Use aria2c just to get the body (piped to stdout)
+    # 2. Use aria2c just to get the body (we would pipe it to stdout, but -o - gives just a file called -, so we cat it afterwards)
     # This allows us to use --disk-cache
-    body=$(aria2c -q --disk-cache=16M \
+    BODYFILE="$(mktemp --tmpdir "tmp.gh-org-repos-aria2c.${USER}.XXXXX")"
+    BODYDIR="$(dirname "${BODYFILE}")"
+    BODYBASE="$(basename "${BODYFILE}")"
+    echo "bodyfile: ${BODYFILE}" >&2
+    body=$(aria2c --disk-cache=16M \
       --header="Accept: application/vnd.github.v3+json" \
-      -o - "$url" 2>/dev/null)
+      --dir "${BODYDIR}" --allow-overwrite \
+      -o "${BODYBASE}" "$url" >/dev/null; cat "${BODYFILE}")
+    # removed -q and 2>/dev/null temporarily, as well as this:
+    # rm -f "${BODYFILE}"
 
     # -q: quiet
     # --disk-cache: as requested
@@ -90,3 +97,5 @@ while [ -n "$url" ]; do
         sed -n 's#.*<https://api.github.com\([^>]*\)>; rel="next".*#https://api.github.com\1#p')
 
 done
+
+echo "Finished with final url: $url" >&2
