@@ -3,9 +3,9 @@
 # Example:
 # GHORG=something
 # JOBS=3
-# ~/zzz-gh-org-repos.sh $GHORG | REPO_UPDATE=1 parallel --joblog /tmp/$GHORG_job_progress.log --resume --resume-failed -P${JOBS:-3} --bar -I{} ~/zzz-archive_sw.sh https://github.com/$GHORG/{}
+# ~/zzz-gh-org-repos.sh $GHORG | REPO_UPDATE=1 parallel --joblog /tmp/${GHORG}_job_progress.log --resume --resume-failed -P${JOBS:-3} --bar -I{} ~/zzz-archive_sw.sh https://github.com/$GHORG/{}
 # or
-# curl https://api.github.com/users/$GHORG/repos?per_page=100 | jq -r '.[] | select(.disabled != true) | .name'   | REPO_UPDATE=1 parallel --joblog /tmp/$GHORG_job_progress.log --resume --resume-failed -P${JOBS:-3} --bar -I{} ~/zzz-archive_sw.sh https://github.com/$GHORG/{}
+# curl https://api.github.com/users/$GHORG/repos?per_page=100 | jq -r '.[] | select(.disabled != true) | .name'   | REPO_UPDATE=1 parallel --joblog /tmp/${GHORG}_job_progress.log --resume --resume-failed -P${JOBS:-3} --bar -I{} ~/zzz-archive_sw.sh https://github.com/$GHORG/{}
 
 set -e
 POOL="${POOL:-"$(ls -1 / | grep pool | head -n1)"}"
