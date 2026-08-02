@@ -61,6 +61,16 @@ it may have been adapted for brevity and compactness:
 > read:issue:bitbucket
 > ```
 
+### More docs
+
+Available scopes: https://developer.atlassian.com/cloud/bitbucket/rest/intro/#bitbucket-oauth-2-0-scopes
+
+Announcement sunsetting issues and wikis August 20 2026 (very soon!): https://community.atlassian.com/forums/Bitbucket-articles/Announcing-sunset-of-Bitbucket-Issues-and-Wikis/ba-p/3193882?referer=https://community.atlassian.com/forums/Bitbucket-articles/Announcing-sunset-of-Bitbucket-Issues-and-Wikis/ba-p/3193882
+
+Exporting issue data (does not focus on Jira Cloud despite URL): https://support.atlassian.com/bitbucket-cloud/docs/export-issue-data-to-jira-cloud/
+
+Issue format: https://support.atlassian.com/bitbucket-cloud/docs/issue-import-and-export-data-format/
+
 ### Goals compared to initial requirements
 
 Once the code is submitted, we need to:
