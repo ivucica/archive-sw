@@ -508,3 +508,10 @@ Once the code is submitted, we need to:
     using a wrapper that defaults to the same as `./archive_sw.sh` (one repo)
     and `./archive_sw_ghorg.sh` (all GitHub org repos).
 2.  Archive wikis too.
+3.  After --interactive_login we should not immediately begin archival. User may not be aware of `--archive_dir`.
+4.  We must not double the work if archival of e.g. issues previously succeeded.
+5.  Once issue archival begun we need to wait for it to actually produce a zip.
+6.  A flag to `--keep_going` / `-k` should default to False (i.e. by default, abort in case of an error).
+7.  Cloning URLs should just be https://bitbucket.org/... -- no username. User can configure ~/.gitconfig if needed.
+8.  Cloning should create a full `--mirror` in `${ARCHIVE_DIR}/bitbucket.org/ORGHERE/REPOHERE.git` then use `--reference` to reference it at `${ARCHIVE_DIR}/bitbucket.org/ORGHERE/REPOHERE` (without .git suffix). See `archive_sw.sh`.
+9.  Recommend making `--archive_dir` a required flag with the default constructed in `archive_bitbucket_single.sh` / `archive_bitbucket_org.sh` in the same way as is done for Github in `archive_sw.sh` and `archive_sw_ghorg.sh`.
