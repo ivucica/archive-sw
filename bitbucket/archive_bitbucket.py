@@ -27,6 +27,8 @@ flags.DEFINE_boolean('keep_going', False, 'Continue even if an error occurs duri
 flags.DEFINE_boolean('list', False, 'List all repositories in the organization and exit.')
 flags.DEFINE_boolean('archive_wiki', True, 'Archive the wiki if it exists.')
 flags.DEFINE_boolean('archive_issues', True, 'Archive the issues if they exist.')
+flags.DEFINE_integer('issue_export_interval', 30, 'Interval in seconds to print status to stderr.')
+flags.DEFINE_integer('issue_export_timeout', 600, 'Timeout in seconds for issue export job.')
 flags.DEFINE_boolean('archive_metadata', True, 'Archive the repository metadata as JSON.')
 flags.DEFINE_boolean('archive_repo', True, 'Archive the Git repository (mirror and reference clone).')
 
@@ -213,69 +215,95 @@ def clone_git_repo(repo_url, git_dest, repo_dir):
 
 def archive_issues(org, repo_slug, token, dest_dir):
     zip_path = os.path.join(dest_dir, f"{repo_slug}_issues.zip")
+    job_url_file = os.path.join(dest_dir, f"{repo_slug}_issues_job.json")
+
     if os.path.exists(zip_path):
         logging.info(f"Issues archive already exists at {zip_path}, skipping export.")
+        if os.path.exists(job_url_file):
+            os.remove(job_url_file)
         return
 
-    logging.info(f"Requesting issues export for {repo_slug}...")
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    url = f"https://api.bitbucket.org/2.0/repositories/{org}/{repo_slug}/issues/export"
-    
-    # Start the export job
-    response = requests.post(url, headers=headers, json={})
-    
-    if response.status_code not in (202, 200, 201):
-        raise RuntimeError(f"Failed to trigger issues export: {response.text}")
 
-    job_url = response.headers.get('Location')
-    if not job_url:
-        data = response.json()
-        job_url = data.get('links', {}).get('self', {}).get('href')
+    job_url = None
+    if os.path.exists(job_url_file):
+        logging.info("Found existing issues export job URL from sidecar file. Resuming tracking...")
+        with open(job_url_file, 'r') as f:
+            job_url = json.load(f).get('job_url')
 
     if not job_url:
-        raise RuntimeError("Could not determine job polling URL from response.")
+        logging.info(f"Requesting issues export for {repo_slug}...")
+        url = f"https://api.bitbucket.org/2.0/repositories/{org}/{repo_slug}/issues/export"
+        response = requests.post(url, headers=headers, json={})
+        if response.status_code not in (202, 200, 201):
+            raise RuntimeError(f"Failed to trigger issues export: {response.text}")
 
-    logging.info("Export job started. Polling status...")
+        job_url = response.headers.get('Location')
+        if not job_url:
+            data = response.json()
+            job_url = data.get('links', {}).get('self', {}).get('href')
+
+        if not job_url:
+            raise RuntimeError("Could not determine job polling URL from response.")
+        
+        with open(job_url_file, 'w') as f:
+            json.dump({'job_url': job_url}, f)
+
+    logging.info("Export job started/resumed. Polling status...")
+    start_time = time.time()
+    last_print_time = start_time
     
-    while True:
-        status_resp = requests.get(job_url, headers=headers)
-        status_resp.raise_for_status()
-        status_data = status_resp.json()
-        
-        phase = status_data.get('phase', status_data.get('status', 'UNKNOWN'))
-        logging.info(f"Export phase: {phase} ...")
-        
-        if phase in ('COMPLETED', 'SUCCESS'):
-            break
-        elif phase in ('FAILED', 'ERROR'):
-            raise RuntimeError(f"Issue export failed: {status_data}")
+    try:
+        while True:
+            status_resp = requests.get(job_url, headers=headers)
+            status_resp.raise_for_status()
+            status_data = status_resp.json()
             
-        time.sleep(5)
+            phase = status_data.get('phase', status_data.get('status', 'UNKNOWN'))
+            
+            now = time.time()
+            if now - last_print_time >= FLAGS.issue_export_interval:
+                logging.info(f"Export phase for {repo_slug}: {phase} ...")
+                last_print_time = now
 
-    # Download the zip
-    # Bitbucket API typically provides the download link in the completed payload
-    download_url = None
-    if 'links' in status_data and 'export_result' in status_data['links']:
-        download_url = status_data['links']['export_result']['href']
-    else:
-        # Fallback to appending /download or using job ID directly
-        job_id = status_data.get('id') or job_url.rstrip('/').split('/')[-1]
-        download_url = f"https://api.bitbucket.org/2.0/repositories/{org}/{repo_slug}/issues/export/{job_id}/export.zip"
+            if phase in ('COMPLETED', 'SUCCESS'):
+                break
+            elif phase in ('FAILED', 'ERROR'):
+                raise RuntimeError(f"Issue export failed: {status_data}")
+            
+            if now - start_time > FLAGS.issue_export_timeout:
+                raise TimeoutError(f"Issue export timed out after {FLAGS.issue_export_timeout}s")
 
-    logging.info(f"Downloading issues zip from {download_url}...")
-    zip_resp = requests.get(download_url, headers=headers, stream=True)
-    if zip_resp.status_code == 200:
-        zip_path = os.path.join(dest_dir, f"{repo_slug}_issues.zip")
-        with open(zip_path, 'wb') as f:
-            for chunk in zip_resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-        logging.info(f"Saved issues archive to {zip_path}")
-    else:
-        raise RuntimeError(f"Failed to download zip: {zip_resp.status_code} - {zip_resp.text}")
+            time.sleep(5)
+
+        # Download the zip
+        download_url = None
+        if 'links' in status_data and 'export_result' in status_data['links']:
+            download_url = status_data['links']['export_result']['href']
+        else:
+            job_id = status_data.get('id') or job_url.rstrip('/').split('/')[-1]
+            download_url = f"https://api.bitbucket.org/2.0/repositories/{org}/{repo_slug}/issues/export/{job_id}/export.zip"
+
+        logging.info(f"Downloading issues zip from {download_url}...")
+        zip_resp = requests.get(download_url, headers=headers, stream=True)
+        if zip_resp.status_code == 200:
+            with open(zip_path, 'wb') as f:
+                for chunk in zip_resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            logging.info(f"Saved issues archive to {zip_path}")
+            if os.path.exists(job_url_file):
+                os.remove(job_url_file)
+        else:
+            raise RuntimeError(f"Failed to download zip: {zip_resp.status_code} - {zip_resp.text}")
+
+    except Exception as e:
+        logging.error(f"Error during issues archive for {repo_slug}: {e}")
+        raise
+
 
 
 def main(argv):
