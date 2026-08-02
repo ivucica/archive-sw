@@ -291,7 +291,7 @@ def main(argv):
             logging.fatal("Archive directory must be specified with --archive_dir.")
             sys.exit(1)
 
-    if not os.path.exists(FLAGS.archive_dir):
+    if FLAGS.archive_dir and not os.path.exists(FLAGS.archive_dir):
         logging.info(f"Creating archive directory at {FLAGS.archive_dir}")
         os.makedirs(FLAGS.archive_dir, exist_ok=True)
 
