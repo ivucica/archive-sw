@@ -20,12 +20,13 @@ FLAGS = flags.FLAGS
 DEFAULT_ARCHIVE_DIR = os.environ.get('BITBUCKET_ARCHIVE_DIR', '/tmp/all_roots')
 
 flags.DEFINE_string('archive_dir', DEFAULT_ARCHIVE_DIR, 'Root directory for archives.')
+flags.mark_flag_as_required('archive_dir')
 flags.DEFINE_string('token_file', 'bitbucket_token.json', 'Path to file containing or to receive the access/refresh token.')
 flags.DEFINE_string('client_creds_file', 'bitbucket_client.json', 'Path to file containing {"client_id": "...", "client_secret": "..."}.')
 flags.DEFINE_string('org', None, 'Bitbucket organization (workspace) to archive.')
 flags.DEFINE_string('repo', None, 'Specific repo to archive. If omitted, archives all repos in the org.')
 flags.DEFINE_boolean('interactive_login', False, 'Trigger web browser to perform OAuth2 login and save token.')
-flags.DEFINE_boolean('list', False, 'Only list the repository slugs.')
+flags.DEFINE_boolean('keep_going', False, 'Continue even if an error occurs during archival.')
 
 flags.mark_flag_as_required('org')
 
@@ -170,20 +171,33 @@ def get_all_repos(org, token):
     return repos
 
 
-def clone_git_repo(repo_url, token, dest_dir):
-    # Inject token into URL for authentication
-    parsed = urllib.parse.urlparse(repo_url)
-    auth_url = f"{parsed.scheme}://x-token-auth:{token}@{parsed.netloc}{parsed.path}"
-    
-    if os.path.exists(dest_dir):
-        logging.info(f"Directory {dest_dir} exists, attempting git fetch instead of clone...")
-        subprocess.run(['git', 'fetch', '--all'], cwd=dest_dir, check=True)
+def clone_git_repo(repo_url, git_dest, repo_dir):
+    # 1. Handle .git directory (mirror)
+    if os.path.exists(git_dest):
+        logging.info(f"Directory {git_dest} exists, attempting git fetch instead of clone...")
+        subprocess.run(['git', 'fetch', '--all'], cwd=git_dest, check=True)
     else:
-        logging.info(f"Cloning mirror to {dest_dir} ...")
-        subprocess.run(['git', 'clone', '--mirror', auth_url, dest_dir], check=True)
+        logging.info(f"Cloning mirror to {git_dest} ...")
+        os.makedirs(os.path.dirname(git_dest), exist_ok=True)
+        subprocess.run(['git', 'clone', '--mirror', repo_url, git_dest], check=True)
+
+    # 2. Handle non-.git directory (reference clone)
+    if os.path.exists(repo_dir):
+        logging.info(f"Directory {repo_dir} exists, attempting git fetch and pull instead of clone...")
+        subprocess.run(['git', 'fetch', '--all'], cwd=repo_dir, check=True)
+        subprocess.run(['git', 'pull'], cwd=repo_dir, check=True)
+    else:
+        logging.info(f"Cloning with reference to {repo_dir} ...")
+        ref_path = os.path.realpath(git_dest)
+        subprocess.run(['git', 'clone', '--reference', ref_path, repo_url, repo_dir], check=True)
 
 
 def archive_issues(org, repo_slug, token, dest_dir):
+    zip_path = os.path.join(dest_dir, f"{repo_slug}_issues.zip")
+    if os.path.exists(zip_path):
+        logging.info(f"Issues archive already exists at {zip_path}, skipping export.")
+        return
+
     logging.info(f"Requesting issues export for {repo_slug}...")
     headers = {
         "Authorization": f"Bearer {token}",
@@ -196,8 +210,7 @@ def archive_issues(org, repo_slug, token, dest_dir):
     response = requests.post(url, headers=headers, json={})
     
     if response.status_code not in (202, 200, 201):
-        logging.error(f"Failed to trigger issues export: {response.text}")
-        return
+        raise RuntimeError(f"Failed to trigger issues export: {response.text}")
 
     job_url = response.headers.get('Location')
     if not job_url:
@@ -205,8 +218,7 @@ def archive_issues(org, repo_slug, token, dest_dir):
         job_url = data.get('links', {}).get('self', {}).get('href')
 
     if not job_url:
-        logging.error("Could not determine job polling URL from response.")
-        return
+        raise RuntimeError("Could not determine job polling URL from response.")
 
     logging.info("Export job started. Polling status...")
     
@@ -221,8 +233,7 @@ def archive_issues(org, repo_slug, token, dest_dir):
         if phase in ('COMPLETED', 'SUCCESS'):
             break
         elif phase in ('FAILED', 'ERROR'):
-            logging.error(f"Issue export failed: {status_data}")
-            return
+            raise RuntimeError(f"Issue export failed: {status_data}")
             
         time.sleep(5)
 
@@ -245,7 +256,7 @@ def archive_issues(org, repo_slug, token, dest_dir):
                 f.write(chunk)
         logging.info(f"Saved issues archive to {zip_path}")
     else:
-        logging.error(f"Failed to download zip: {zip_resp.status_code} - {zip_resp.text}")
+        raise RuntimeError(f"Failed to download zip: {zip_resp.status_code} - {zip_resp.text}")
 
 
 def main(argv):
@@ -255,7 +266,13 @@ def main(argv):
     target_repo = FLAGS.repo
     
     token = get_valid_token()
-    
+
+    if FLAGS.interactive_login:
+        logging.info("Interactive login completed/requested.")
+        logging.info(f"Current archive directory is: {FLAGS.archive_dir}")
+        logging.info("You can now run the script with --archive_dir if you wish to change it before starting archival.")
+        return
+
     logging.info(f"Fetching repository list for organization: {org}")
     repos = get_all_repos(org, token)
     
@@ -279,7 +296,10 @@ def main(argv):
         slug = repo['slug']
         logging.info(f"--- Processing repository: {slug} ---")
         
+        # The non-.git directory is at org_dir/slug
         repo_dir = os.path.join(org_dir, slug)
+        # The .git directory is at org_dir/slug.git
+        git_dest = os.path.join(org_dir, f"{slug}.git")
         os.makedirs(repo_dir, exist_ok=True)
         
         # 1. Save metadata
@@ -291,23 +311,29 @@ def main(argv):
         clone_url = next((link['href'] for link in repo['links']['clone'] if link['name'] == 'https'), None)
         if not clone_url:
             logging.error(f"No HTTPS clone URL found for {slug}")
+            if not FLAGS.keep_going:
+                sys.exit(1)
             continue
 
-        # 2. Clone Git Repo (Mirror)
-        git_dest = os.path.join(repo_dir, f"{slug}.git")
+        # 2. Clone Git Repo (Mirror + Reference clone)
         try:
-            clone_git_repo(clone_url, token, git_dest)
+            clone_git_repo(clone_url, git_dest, repo_dir)
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to clone repository {slug}: {e}")
+            if not FLAGS.keep_going:
+                sys.exit(1)
 
-        # 3. Clone Wiki
+        # 3. Clone Wiki (Mirror + Reference clone)
         if repo.get('has_wiki'):
             wiki_url = clone_url.replace('.git', '.wiki.git')
-            wiki_dest = os.path.join(repo_dir, f"{slug}.wiki.git")
+            wiki_dest = os.path.join(org_dir, f"{slug}.wiki.git")
+            wiki_repo_dir = os.path.join(org_dir, f"{slug}.wiki")
             try:
-                clone_git_repo(wiki_url, token, wiki_dest)
+                clone_git_repo(wiki_url, wiki_dest, wiki_repo_dir)
             except subprocess.CalledProcessError as e:
                 logging.error(f"Failed to clone wiki for {slug}: {e}")
+                if not FLAGS.keep_going:
+                    sys.exit(1)
         else:
             logging.info(f"No wiki enabled for {slug}")
 
@@ -317,6 +343,8 @@ def main(argv):
                 archive_issues(org, slug, token, repo_dir)
             except Exception as e:
                 logging.error(f"Failed to archive issues for {slug}: {e}")
+                if not FLAGS.keep_going:
+                    sys.exit(1)
         else:
             logging.info(f"No issues enabled for {slug}")
 
@@ -324,4 +352,7 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    if '-k' in sys.argv:
+        FLAGS.keep_going = True
+        sys.argv.remove('-k')
     app.run(main)
