@@ -11,5 +11,5 @@ Use this when you need to ensure all components (git mirror, wiki, and issues) o
 
 ## Usage Example
 ```bash
-python3 bitbucket/archive_bitbucket_single.sh https://bitbucket.org/workspace/repo
+bitbucket/archive_bitbucket_single.sh https://bitbucket.org/workspace/repo
 ```

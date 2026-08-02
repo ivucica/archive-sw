@@ -45,7 +45,6 @@ flags.DEFINE_alias('w', 'archive_wiki')
 flags.DEFINE_alias('u', 'archive_issues')
 flags.DEFINE_alias('m', 'archive_metadata')
 flags.DEFINE_alias('g', 'archive_repo')
-flags.DEFINE_alias('h', 'help')
 
 flags.mark_flag_as_required('org')
 

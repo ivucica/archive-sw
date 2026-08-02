@@ -18,5 +18,5 @@ if [[ -z "${WORKSPACE}" ]] || [[ -z "${REPO_SLUG}" ]] ; then
   exit 1
 fi
 
-# Assuming we are running from the project root. Adjust if necessary.
-python3 bitbucket/archive_bitbucket_single.sh https://bitbucket.org/workspace/repo
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+python3 archive_bitbucket_single.py "https://bitbucket.org/${WORKSPACE}/${REPO_SLUG}"
