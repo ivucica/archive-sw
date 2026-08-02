@@ -288,8 +288,9 @@ def main(argv):
         FLAGS.archive_dir = os.environ.get('BITBUCKET_ARCHIVE_DIR')
 
     if not FLAGS.archive_dir:
-        logging.fatal("Archive directory must be specified with --archive_dir.")
-        sys.exit(1)
+        if not FLAGS.interactive_login and not FLAGS.list:
+            logging.fatal("Archive directory must be specified with --archive_dir.")
+            sys.exit(1)
 
     if not os.path.exists(FLAGS.archive_dir):
         logging.info(f"Creating archive directory at {FLAGS.archive_dir}")
