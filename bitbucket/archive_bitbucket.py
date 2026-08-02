@@ -16,10 +16,8 @@ from absl import logging
 
 FLAGS = flags.FLAGS
 
-# Support customization via environment variable as requested in AGENTS.md
-DEFAULT_ARCHIVE_DIR = os.environ.get('BITBUCKET_ARCHIVE_DIR', '/tmp/all_roots')
 
-flags.DEFINE_string('archive_dir', DEFAULT_ARCHIVE_DIR, 'Root directory for archives.')
+flags.DEFINE_string('archive_dir', None, 'Root directory for archives.')
 flags.mark_flag_as_required('archive_dir')
 flags.DEFINE_string('token_file', 'bitbucket_token.json', 'Path to file containing or to receive the access/refresh token.')
 flags.DEFINE_string('client_creds_file', 'bitbucket_client.json', 'Path to file containing {"client_id": "...", "client_secret": "..."}.')
@@ -284,6 +282,18 @@ def main(argv):
     target_repo = FLAGS.repo
     
     token = get_valid_token()
+
+    if not FLAGS.archive_dir and os.environ.get('BITBUCKET_ARCHIVE_DIR'):
+        # Support customization via environment variable as requested in AGENTS.md
+        FLAGS.archive_dir = os.environ.get('BITBUCKET_ARCHIVE_DIR')
+
+    if not FLAGS.archive_dir:
+        logging.fatal("Archive directory must be specified with --archive_dir.")
+        sys.exit(1)
+
+    if not os.path.exists(FLAGS.archive_dir):
+        logging.info(f"Creating archive directory at {FLAGS.archive_dir}")
+        os.makedirs(FLAGS.archive_dir, exist_ok=True)
 
     if FLAGS.interactive_login:
         logging.info("Interactive login completed/requested.")
