@@ -346,31 +346,33 @@ def main(argv):
                 if not FLAGS.keep_going:
                     sys.exit(1)
 
-
         # 3. Clone Wiki (Mirror + Reference clone)
-        if FLAGS.archive_wiki and repo.get('has_wiki') and clone_url:
-            wiki_url = clone_url.replace('.git', '.wiki.git')
-            wiki_dest = os.path.join(org_dir, f"{slug}.wiki.git")
-            wiki_repo_dir = os.path.join(org_dir, f"{slug}.wiki")
-            try:
-                clone_git_repo(wiki_url, wiki_dest, wiki_repo_dir)
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Failed to clone wiki for {slug}: {e}")
-                if not FLAGS.keep_going:
-                    sys.exit(1)
-        elif FLAGS.archive_wiki:
-             logging.info(f"No wiki enabled for {slug}")
+        if FLAGS.archive_wiki:
+            if repo.get('has_wiki') and clone_url:
+                wiki_url = clone_url.replace('.git', '.wiki.git')
+                wiki_dest = os.path.join(org_dir, f"{slug}.wiki.git")
+                wiki_repo_dir = os.path.join(org_dir, f"{slug}.wiki")
+                try:
+                    clone_git_repo(wiki_url, wiki_dest, wiki_repo_dir)
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"Failed to clone wiki for {slug}: {e}")
+                    if not FLAGS.keep_going:
+                        sys.exit(1)
+            else:
+                logging.info(f"No wiki found for {slug}")
 
         # 4. Archive Issues
-        if FLAGS.archive_issues and repo.get('has_issues'):
-            try:
-                archive_issues(org, slug, token, repo_dir)
-            except Exception as e:
-                logging.error(f"Failed to archive issues for {slug}: {e}")
-                if not FLAGS.keep_going:
-                    sys.exit(1)
-        elif FLAGS.archive_issues:
-            logging.info(f"No issues enabled for {slug}")
+        if FLAGS.archive_issues:
+            if repo.get('has_issues'):
+                try:
+                    archive_issues(org, slug, token, repo_dir)
+                except Exception as e:
+                    logging.error(f"Failed to archive issues for {slug}: {e}")
+                    if not FLAGS.keep_going:
+                        sys.exit(1)
+            else:
+                logging.info(f"No issues found for {slug}")
+
 
     logging.info("Archival completed successfully.")
 
