@@ -18,7 +18,6 @@ FLAGS = flags.FLAGS
 
 
 flags.DEFINE_string('archive_dir', None, 'Root directory for archives.')
-flags.mark_flag_as_required('archive_dir')
 flags.DEFINE_string('token_file', 'bitbucket_token.json', 'Path to file containing or to receive the access/refresh token.')
 flags.DEFINE_string('client_creds_file', 'bitbucket_client.json', 'Path to file containing {"client_id": "...", "client_secret": "..."}.')
 flags.DEFINE_string('org', None, 'Bitbucket organization (workspace) to archive.')
