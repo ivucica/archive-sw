@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -15,12 +16,16 @@ from absl import logging
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('archive_dir', '/tmp/all_roots', 'Root directory for archives.')
+# Support customization via environment variable as requested in AGENTS.md
+DEFAULT_ARCHIVE_DIR = os.environ.get('BITBUCKET_ARCHIVE_DIR', '/tmp/all_roots')
+
+flags.DEFINE_string('archive_dir', DEFAULT_ARCHIVE_DIR, 'Root directory for archives.')
 flags.DEFINE_string('token_file', 'bitbucket_token.json', 'Path to file containing or to receive the access/refresh token.')
 flags.DEFINE_string('client_creds_file', 'bitbucket_client.json', 'Path to file containing {"client_id": "...", "client_secret": "..."}.')
 flags.DEFINE_string('org', None, 'Bitbucket organization (workspace) to archive.')
 flags.DEFINE_string('repo', None, 'Specific repo to archive. If omitted, archives all repos in the org.')
 flags.DEFINE_boolean('interactive_login', False, 'Trigger web browser to perform OAuth2 login and save token.')
+flags.DEFINE_boolean('list', False, 'Only list the repository slugs.')
 
 flags.mark_flag_as_required('org')
 
@@ -32,7 +37,6 @@ OAUTH_SERVER = None
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         global OAUTH_CODE
-        global OAUTH_SERVER
         query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         if 'code' in query_components:
             OAUTH_CODE = query_components['code'][0]
@@ -45,8 +49,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
             self.wfile.write(b"<html><body><h1>Error</h1><p>No code found in request.</p></body></html>")
+        
         # Shutdown server asynchronously
-        if OAUTH_SERVER is not None:
+        if OAUTH_SERVER:
             threading.Thread(target=OAUTH_SERVER.shutdown).start()
 
     def log_message(self, format, *args):
@@ -55,7 +60,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
 def perform_interactive_login(client_id, client_secret):
     global OAUTH_SERVER, OAUTH_CODE
-    port = 8080
+    port = int(os.environ.get('BITBUCKET_OAUTH_PORT', 8080))
     redirect_uri = f"http://localhost:{port}/callback"
     
     auth_url = f"https://bitbucket.org/site/oauth2/authorize?client_id={client_id}&response_type=code"
@@ -259,6 +264,11 @@ def main(argv):
         if not repos:
             logging.error(f"Repository {target_repo} not found in org {org}")
             sys.exit(1)
+
+    if FLAGS.list:
+        for r in repos:
+            print(r['slug'])
+        return
             
     logging.info(f"Found {len(repos)} repositories to archive.")
     
