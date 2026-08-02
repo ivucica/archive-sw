@@ -14,9 +14,19 @@ This tool archives Bitbucket repositories for a specific organization/workspace.
 
     *   Go to your Bitbucket settings: `Workspace settings` -> `OAuth consumers`.
     *   Click **Add consumer**.
-    *   Give it a name (e.g., `BitbucketArchiver`).
-    *   **Callback URL**: http://localhost:8080/callback (Must match exactly).
-    *   **Permissions**: Check `Repositories (Read)`, `Issues (Read)`, `Wikis (Read)`.
+    *   **Details**:
+        *   Name*: `BitbucketArchiver` (or any name)
+        *   Description: `Archives Bitbucket repositories, wikis, and issues.`
+        *   URL: `http://localhost:8080`
+    *   **Authorization**:
+        *   [x] Authorization code
+            *   [x] Refresh token (enabled by default when Auth code is checked)
+        *   [ ] Client credentials
+        *   **Callback URL***: `http://localhost:8080/callback` (Must match exactly).
+    *   **Scopes**:
+        *   Repositories: `Read`
+        *   Issues: `Read`
+        *   Wikis: `Read and write`
     *   Save and copy the **Key** (Client ID) and **Secret** (Client Secret).
 
 3.  Create the credentials file:
