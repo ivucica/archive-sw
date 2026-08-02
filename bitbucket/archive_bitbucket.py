@@ -27,6 +27,25 @@ flags.DEFINE_string('org', None, 'Bitbucket organization (workspace) to archive.
 flags.DEFINE_string('repo', None, 'Specific repo to archive. If omitted, archives all repos in the org.')
 flags.DEFINE_boolean('interactive_login', False, 'Trigger web browser to perform OAuth2 login and save token.')
 flags.DEFINE_boolean('keep_going', False, 'Continue even if an error occurs during archival.')
+flags.DEFINE_boolean('list', False, 'List all repositories in the organization and exit.')
+flags.DEFINE_boolean('archive_wiki', True, 'Archive the wiki if it exists.')
+flags.DEFINE_boolean('archive_issues', True, 'Archive the issues if they exist.')
+flags.DEFINE_boolean('archive_metadata', True, 'Archive the repository metadata as JSON.')
+flags.DEFINE_boolean('archive_repo', True, 'Archive the Git repository (mirror and reference clone).')
+
+flags.DEFINE_alias('k', 'keep_going')
+flags.DEFINE_alias('a', 'archive_dir')
+flags.DEFINE_alias('t', 'token_file')
+flags.DEFINE_alias('c', 'client_creds_file')
+flags.DEFINE_alias('o', 'org')
+flags.DEFINE_alias('r', 'repo')
+flags.DEFINE_alias('i', 'interactive_login')
+flags.DEFINE_alias('l', 'list')
+flags.DEFINE_alias('w', 'archive_wiki')
+flags.DEFINE_alias('u', 'archive_issues')
+flags.DEFINE_alias('m', 'archive_metadata')
+flags.DEFINE_alias('g', 'archive_repo')
+flags.DEFINE_alias('h', 'help')
 
 flags.mark_flag_as_required('org')
 
@@ -303,28 +322,33 @@ def main(argv):
         os.makedirs(repo_dir, exist_ok=True)
         
         # 1. Save metadata
-        meta_path = os.path.join(repo_dir, f"{slug}_metadata.json")
-        with open(meta_path, 'w') as f:
-            json.dump(repo, f, indent=2)
-        
-        # Extract HTTPS clone URL
-        clone_url = next((link['href'] for link in repo['links']['clone'] if link['name'] == 'https'), None)
-        if not clone_url:
-            logging.error(f"No HTTPS clone URL found for {slug}")
-            if not FLAGS.keep_going:
-                sys.exit(1)
-            continue
+        if FLAGS.archive_metadata:
+            meta_path = os.path.join(repo_dir, f"{slug}_metadata.json")
+            with open(meta_path, 'w') as f:
+                json.dump(repo, f, indent=2)
+
+        # Extract HTTPS clone URL (needed for repo and wiki)
+        clone_url = None
+        if FLAGS.archive_repo or FLAGS.archive_wiki:
+            clone_url = next((link['href'] for link in repo['links']['clone'] if link['name'] == 'https'), None)
+            if not clone_url:
+                logging.error(f"No HTTPS clone URL found for {slug}")
+                if not FLAGS.keep_going:
+                    sys.exit(1)
+                continue
 
         # 2. Clone Git Repo (Mirror + Reference clone)
-        try:
-            clone_git_repo(clone_url, git_dest, repo_dir)
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Failed to clone repository {slug}: {e}")
-            if not FLAGS.keep_going:
-                sys.exit(1)
+        if FLAGS.archive_repo:
+            try:
+                clone_git_repo(clone_url, git_dest, repo_dir)
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Failed to clone repository {slug}: {e}")
+                if not FLAGS.keep_going:
+                    sys.exit(1)
+
 
         # 3. Clone Wiki (Mirror + Reference clone)
-        if repo.get('has_wiki'):
+        if FLAGS.archive_wiki and repo.get('has_wiki') and clone_url:
             wiki_url = clone_url.replace('.git', '.wiki.git')
             wiki_dest = os.path.join(org_dir, f"{slug}.wiki.git")
             wiki_repo_dir = os.path.join(org_dir, f"{slug}.wiki")
@@ -334,18 +358,18 @@ def main(argv):
                 logging.error(f"Failed to clone wiki for {slug}: {e}")
                 if not FLAGS.keep_going:
                     sys.exit(1)
-        else:
-            logging.info(f"No wiki enabled for {slug}")
+        elif FLAGS.archive_wiki:
+             logging.info(f"No wiki enabled for {slug}")
 
         # 4. Archive Issues
-        if repo.get('has_issues'):
+        if FLAGS.archive_issues and repo.get('has_issues'):
             try:
                 archive_issues(org, slug, token, repo_dir)
             except Exception as e:
                 logging.error(f"Failed to archive issues for {slug}: {e}")
                 if not FLAGS.keep_going:
                     sys.exit(1)
-        else:
+        elif FLAGS.archive_issues:
             logging.info(f"No issues enabled for {slug}")
 
     logging.info("Archival completed successfully.")
