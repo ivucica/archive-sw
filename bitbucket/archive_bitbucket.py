@@ -188,6 +188,8 @@ def get_all_repos(org, token):
 
 def clone_git_repo(repo_url, git_dest, repo_dir):
     # 1. Handle .git directory (mirror)
+    # TODO: if the dir is empty-ish, support init (as an empty bare mirror repo)
+    # and adding the remote to it, followed by fetch. (In case of bugs.)
     if os.path.exists(git_dest):
         logging.info(f"Directory {git_dest} exists, attempting git fetch instead of clone...")
         subprocess.run(['git', 'fetch', '--all'], cwd=git_dest, check=True)
@@ -197,6 +199,8 @@ def clone_git_repo(repo_url, git_dest, repo_dir):
         subprocess.run(['git', 'clone', '--mirror', repo_url, git_dest], check=True)
 
     # 2. Handle non-.git directory (reference clone)
+    # TODO: if the dir is empty-ish, support init and adding the remote to it,
+    # followed by fetch. (In case of bugs.)
     if os.path.exists(repo_dir):
         logging.info(f"Directory {repo_dir} exists, attempting git fetch and pull instead of clone...")
         subprocess.run(['git', 'fetch', '--all'], cwd=repo_dir, check=True)
@@ -328,11 +332,14 @@ def main(argv):
         repo_dir = os.path.join(org_dir, slug)
         # The .git directory is at org_dir/slug.git
         git_dest = os.path.join(org_dir, f"{slug}.git")
-        os.makedirs(repo_dir, exist_ok=True)
-        
+        # Do not make repo dirs until after cloning. That code currently has no
+        # handling of existing empty dirs. Parent dir does need to be made, but
+        # that is done earlier.
+
         # 1. Save metadata
+        # Store it outside repos (directly in org dir).
         if FLAGS.archive_metadata:
-            meta_path = os.path.join(repo_dir, f"{slug}_metadata.json")
+            meta_path = os.path.join(org_dir, f"{slug}_metadata.json")
             with open(meta_path, 'w') as f:
                 json.dump(repo, f, indent=2)
 

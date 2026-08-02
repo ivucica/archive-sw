@@ -3,7 +3,7 @@ set -e
 
 POOL="${POOL:-"$(ls -1 / | grep pool | head -n1)"}"
 YEAR="${YEAR:-$(date +%Y)}"
-ARCHIVE_DIR="${BITBUCKET_ARCHIVE_DIR:-"/$POOL/archive/${YEAR}/Bitbucket"}"
+ARCHIVE_DIR="${BITBUCKET_ARCHIVE_DIR:-"/$POOL/archive/${YEAR}/Software/bitbucket.org"}"
 
 REPO_URL="${REPO_URL:-"$1"}"
 REPO_URL="${REPO_URL#/}"
@@ -19,4 +19,4 @@ if [[ -z "${WORKSPACE}" ]] || [[ -z "${REPO_SLUG}" ]] ; then
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
-python3 archive_bitbucket_single.py "https://bitbucket.org/${WORKSPACE}/${REPO_SLUG}"
+python3 archive_bitbucket.py --org "$WORKSPACE" --repo "$REPO_SLUG" --archive_dir "$ARCHIVE_DIR" "$@"
