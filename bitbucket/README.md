@@ -27,7 +27,8 @@ This tool archives Bitbucket repositories for a specific organization/workspace.
         *   Repositories: `Read`
         *   Issues: `Read`
         *   Wikis: `Read and write`
-    *   Save and copy the **Key** (Client ID) and **Secret** (Client Secret).
+    *   After clicking **Save**, a confirmation page will appear displaying your **Client ID** and **Secret**.
+    *   **Important**: Copy these values immediately into your `bitbucket_client.json` file.
 
 3.  Create the credentials file:
     Save these credentials in a file named `bitbucket_client.json` in the same directory:
